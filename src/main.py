@@ -53,11 +53,20 @@ class GitData:
             ['git', 'log', '-1', '--pretty=%B']
         ).strip()
 
+    def get_all_commit_msg(self):
+        """Get all commit messages"""
+        return subprocess.check_output(
+            ['git', 'log', '--pretty=%B']
+        ).strip()
+
     def get_msg_keywords(self):
         """Get the commit message keywords indicated by the end of a colon"""
-        keys = self.get_last_commit_msg().split(b':')[0]
+        keys = self.get_all_commit_msg()
+        keys = keys.split(b'\n')
+        keys = [key.split(b':')[0].strip().decode('utf-8')
+                for key in keys if b':' in key]
 
-        return keys.decode('utf-8')
+        return keys
 
 
 class ChangelogTemplate:
@@ -107,20 +116,25 @@ class GenerateChangelog:
 
     def get_current_version(self, changelog):
         """Get the current version from the changelog"""
-        match = re.search(r'## \[(\d+.\d+.\d+)\]', changelog)
+        import re
+
+        match = re.search(r'## \[(.+)\]', changelog)
         if match:
             return match.group(1)
         else:
             return None
 
-    def get_next_version(self, current_version):
+    def get_next_version(self, GitData):
         """Get the next version"""
-        if current_version:
-            version = current_version.split('.')
-            version[-1] = str(int(version[-1]) + 1)
-            return '.'.join(version)
-        else:
-            return None
+        keys = GitData.get_msg_keywords()
+
+        match keys:
+            case x if "feat" in x:
+                return "MINOR"
+            case x if "fix" in x:
+                return "PATCH"
+            case _:
+                return "NO CHANGE"
 
 
 def main():
@@ -128,6 +142,8 @@ def main():
     git_data = GitData()
 
     print(f"\n{F.GREEN}git_data{R}: {git_data.get_msg_keywords()}\n")
+
+    print(f"{F.YELLOW}get next version{R}: {GenerateChangelog().get_next_version(git_data)}\n")
 
 
 if '__main__' == __name__:
